@@ -6,6 +6,10 @@ A suite of lightweight Python tools for extracting and standardizing output from
 
 This repository aims at making available `protein_loc_organizer`, a small suite of tools used to produce data tables for the research article "[**PLACEHOLDER:PAPER TITLE**]" (**PLACEHOLDER: DOI**).
 
+# ⚠️ WARNING
+
+The scripts in this repo are published for transparency of publication procedures, but are currently "beta" and not final: be defensive and do not consider them to be fully automatic yet.
+
 ## Quick Index
 
 - [Overview](#overview)
@@ -174,7 +178,7 @@ Similar patterns are used throughout the suite, but each extractor necessarily i
 
 ### Known Limitations
 
-Some parts of the parsing logic could theoretically be more elegant, generalizable, or modular, but cannot be improved meaningfully because the input formats themselves have no guarantees. As long as upstream tools continue to provide:
+Some parts of the parsing logic could theoretically be more elegant, generalizable, or modular, but cannot be improved meaningfully because the input formats themselves have no guarantees. This cannot be changed as long as upstream tools continue to provide:
 
 - undocumented formats
 - *ad-hoc* HTML layouts
@@ -188,7 +192,7 @@ There are sections of each extractor that look brittle or overly manual. This is
 Coming up in the next version(s):
 
 - Change line extraction from brittle, regex-based logic to list-based
-	> Users will provide a list of SeqIDs; tools will extract them using a smart and consistent logic .
+	> Users will provide a list of SeqIDs; tools will extract them using a smart and consistent logic.
 - Unify the overall architecture
 	> Scripts are currently undergoing massive reorganization of core logic, to provide a unified, structured, shared logic, allowing easier management through a wrapper.
 - Factor out common parsing utilities by adding a small `common_utils.py` shared module with helpers 
