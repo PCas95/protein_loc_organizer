@@ -225,4 +225,4 @@ Contributions of bug fixes, improvements, and test cases are also welcome. Pleas
 
 The main purpose of this repository is to provide access to the code used to produce data table in the manuscript "[**PLACEHOLDER:PAPER TITLE**]" (**PLACEHOLDER: DOI**).
 
-The scripts are release for transparency and to help the community, but the most desirable outcome would be the release of a **tested, open-source, published, reproducible and documented bioinformatics pipeline for proteomics**.
+The scripts are released for transparency and to help the community, but the most desirable outcome would be the release of a **tested, open-source, published, reproducible and documented bioinformatics pipeline for proteomics**.
