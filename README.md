@@ -109,7 +109,7 @@ Each extractor can be run independently or, from the upcoming version, also comb
 
 ### Supported Tools
 
-- **BepiPred** – epitope prediction
+- **BepiPred v2.0** – epitope prediction
 - **CELLO** – subcellular localization
 - **LipoP** – signal peptides/lipoprotein detection
 - **PSORTb** – subcellular localization
