@@ -13,17 +13,7 @@ i = None
 s = None
 silent = False
 
-def initialiser(i: str, s: str, dc: dict) -> list:
-	"""
-	Takes a PATH to file, a STRING and an empty DICTIONARY. Returns a header as LIST and updates the DICTIONARY.
-	
-	Args:
-		i (str): Path to input file
-		s (str): Field separator for input file
-		dc (dict): Dictionary
-	Returns:
-		list[str]: List of column names
-	"""
+def initialiser(i, s, dc):
 	with open(i) as fh:
 		header = fh.readline().rstrip().split(s)
 		try:
@@ -50,15 +40,8 @@ def initialiser(i: str, s: str, dc: dict) -> list:
 	return header
 
 
-def save_output(ofi: str, ret_obj: dict, header: list):
-	"""
-	Takes a PATH to output file, a nested DICTIONARY and a LIST. Filters the dictionary and prints lines to file at PATH.
-	
-	Args:
-		ofi (str): Path to output file
-		ret_obj (dict): Nested dictionary (read)
-		header (list[str]): List of column names
-	"""
+def save_output(ofi, ret_obj, header):
+
 	with open(ofi, 'w') as out:
 		## write header to output table
 		print(*header, sep="\t", file=out)
@@ -101,13 +84,7 @@ def save_output(ofi: str, ret_obj: dict, header: list):
 					#print([ret_obj[k][str(i)] for i in range(e[0], e[-1]+1)])
 
 
-def exp_tmp(ret_obj: dict):
-	"""
-	Takes a nested DICTIONARY and runs function with custom params.
-	
-	Args:
-		ret_obj (dict): input nested dictionary
-	"""
+def exp_tmp(ret_obj):
 	global silent
 	silent = True
 	tmp_header = initialiser(i, s, ret_obj)
