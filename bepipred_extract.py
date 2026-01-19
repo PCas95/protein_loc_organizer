@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 # bepipred_extract.py
-__version__ = '1.0.0'
+__version__ = '1.26.19'
 
 # manage libraries
 import argparse, os, sys, re
@@ -13,11 +13,21 @@ i = None
 s = None
 silent = False
 
-def header_creator(i, s, dc):
+def initialiser(i: str, s: str, dc: dict) -> list:
+	"""
+	Takes a PATH to file, a STRING and an empty DICTIONARY. Returns a header as LIST and updates the DICTIONARY.
+	
+	Args:
+		i (str): Path to input file
+		s (str): Field separator for input file
+		dc (dict): Dictionary
+	Returns:
+		list[str]: List of column names
+	"""
 	with open(i) as fh:
 		header = fh.readline().rstrip().split(s)
 		try:
-			if header[0] != 'Entry' and header[1] != 'Position' and header[2] != 'AminoAcid' and header[3] != 'Exposed/Buried':
+			if header[0] != 'Entry' or header[1] != 'Position' or header[2] != 'AminoAcid' or header[3] != 'Exposed/Buried':
 				header_error()
 		except IndexError:
 			header_error()
@@ -29,20 +39,29 @@ def header_creator(i, s, dc):
 			if seqid not in dc.keys():
 				dc[seqid] = {cols[1]: { header[2]: cols[2], header[3]: cols[3],
 										header[4]: cols[4], header[5]: cols[5], 
-										header[6]: cols[6], header[7]: cols[7], header[8]: cols[8] }
+										header[6]: cols[6], header[7]: cols[7],
+										header[8]: cols[8] }
 							}
 			else:
-				dc[seqid][cols[1]] = { header[2]: cols[2], header[3]: cols[3],
+				dc[seqid][cols[1]] =  { header[2]: cols[2], header[3]: cols[3],
 										header[4]: cols[4], header[5]: cols[5], 
-										header[6]: cols[6], header[7]: cols[7], header[8]: cols[8] }
+										header[6]: cols[6], header[7]: cols[7],
+										header[8]: cols[8] }
 	return header
 
 
-def save_output(ofi, ret_obj, header):
-
+def save_output(ofi: str, ret_obj: dict, header: list):
+	"""
+	Takes a PATH to output file, a nested DICTIONARY and a LIST. Filters the dictionary and prints lines to file at PATH.
+	
+	Args:
+		ofi (str): Path to output file
+		ret_obj (dict): Nested dictionary (read)
+		header (list[str]): List of column names
+	"""
 	with open(ofi, 'w') as out:
 		## write header to output table
-		print(*header, sep=',', file=out)
+		print(*header, sep="\t", file=out)
 
 		## start navigating dictionary: for each protein ID
 		for k in ret_obj.keys():
@@ -77,23 +96,37 @@ def save_output(ofi, ret_obj, header):
 				for e in exposed:
 					for i in range(e[0], e[-1]+1):
 						vals = list(ret_obj[k][str(i)].values())
-						print(k, i, *vals, sep=',', file=out)
+						print(k, i, *vals, sep="\t", file=out)
 					#print(k, exposed)
 					#print([ret_obj[k][str(i)] for i in range(e[0], e[-1]+1)])
 
 
+def exp_tmp(ret_obj: dict):
+	"""
+	Takes a nested DICTIONARY and runs function with custom params.
+	
+	Args:
+		ret_obj (dict): input nested dictionary
+	"""
+	global silent
+	silent = True
+	tmp_header = initialiser(i, s, ret_obj)
+	save_output('bepipred.tmp', ret_obj, tmp_header)
+
+
 def main():
 
-	# set default output name
+	# set default vars
 	date = datetime.now()
-	outName = 'bepipred_results_' + str(date.strftime('%Y-%m-%d_%H-%M-%S')) + '.csv'
-	sep = ';'
+	outName = 'bepipred_results_' + str(date.strftime('%Y-%m-%d_%H-%M-%S')) + '.tsv'
+	sep = ','
+	outSep = "\t"
+	description = "bepipred_extract.py extracts exposed epitopes from Bepipred output and creates a TSV table with the prediction results.\nThe epitope is considered exposed if: 1) epitope probability >= 0.5; 2) exposed/buried == E; 3) >= 4 consecutive aminoacids meet conditions 1 and 2."
 
 	# manage arguments 
-	parser = argparse.ArgumentParser(prog='bepipred_extract.py', description="Extracts data from Bepipred output (as copied from the results web page) and creates a csv table with the prediction results.\
-		Usage: python3 bepipred_extract.py -i <input_file>")
+	parser = argparse.ArgumentParser(prog='bepipred_extract.py', description=description)
 	parser.add_argument('-i', '--input', help="Bepipred prediction output.", required=True)
-	parser.add_argument('-s', '--separator', default=sep, help="Field separator used in the input csv file. Default is semicolon (';', default for Bepipred output), but other separators can be specified to override this.")
+	parser.add_argument('-s', '--separator', default=sep, help="Field separator used in the input file. Default is comma (',', default for Bepipred output).")
 	parser.add_argument('-o', '--output', default=outName, help='Optional: a file or path and file name for the output csv table. Default: bepipred_results_date_time.csv in current directory.')
 	args = parser.parse_args()
 
@@ -103,9 +136,9 @@ def main():
 
 	head_error_message = "ERROR: header of input table does not match that of Bepipred's output.\n\
 	Please check that:\n\
-		1. you are providing a valid Bepipred output csv table\n\
+		1. you are providing a valid Bepipred output table\n\
 		2. your table doesn't have a poorly formatted or absent header\n\
-		3. you are passing the correct field separator for this table (run bepipred_extract.py --help)"
+		3. the field separator for this table matches the default separator or the separator being passed (run bepipred_extract.py --help)"
 	
 	def header_error():
 		print(head_error_message)
@@ -115,7 +148,7 @@ def main():
 	dc = dict()
 	innerDic = dict()
 
-	header = header_creator(i, s, dc)
+	header = initialiser(i, s, dc)
 
 	# kill script and throw error if input is not a valid file or no SeqIDs are found
 	if len(dc.keys()) == 0:
@@ -123,24 +156,21 @@ def main():
 		Please ensure the input is Bepipred's csv output and that you are specifying the correct separator (default ';', check manual with " + os.path.basename(__file__) + " --help)")
 		sys.exit(1)
 
-	# extract aas exposed to solvent and create filtered output table
+	# extract AAs exposed to solvent and create filtered output table
 	# criteria: epitope probability >= 0.5 & exposed/buried == E & consecutive aminoacids >= 4
+	print(f"\n{description}\n")
 	save_output(args.output, dc, header)
 
 	# print exit message and exit
 	if os.path.exists(args.output):
-		print("Finished. Output file is " + args.output)
+		with open(args.output, 'r') as f:
+			if sum(1 for _ in f) < 2:
+				print("\nNo epitope exposed to solvent was found")#, file=args.output)
+		print(f"\nFinished. Output file is {args.output}")
 	else:
 		print('Failed to write output file.')
 
 	return dc
-
-
-def exp_tmp(ret_obj):
-	global silent
-	silent = True
-	tmp_header = header_creator(i, s, ret_obj)
-	save_output('bepipred.tmp', ret_obj, tmp_header)
 
 
 if __name__ == "__main__":
@@ -149,37 +179,38 @@ if __name__ == "__main__":
 
 
 
-# costruisco un dizionario come questo:		
-#{
-#	XX_XXXX_X: {
-#				pos1:
-#					{
-#						exp: y/n,
-#						prob: >|<0.5
-#						...
-#					},
-#				pos2:
-#					{
-#						exp: y/n,
-#						prob: >|<0.5
-#						...
-#					}
-#				...
-#	},
-#	YY_YYYY_Y: {
-#				pos1:
-#					{
-#						exp: y/n,
-#						prob: >|<0.5
-#						...
-#					},
-#				pos2:
-#					{
-#						exp: y/n,
-#						prob: >|<0.5
-#						...
-#					}
-#				...
-#	}
-#	...
-#}
+
+# building a nested dictionary like this:
+	#{
+	#	XX_XXXX_X: {
+	#				pos1:
+	#					{
+	#						exp: y/n,
+	#						prob: >|<0.5
+	#						...
+	#					},
+	#				pos2:
+	#					{
+	#						exp: y/n,
+	#						prob: >|<0.5
+	#						...
+	#					}
+	#				...
+	#	},
+	#	YY_YYYY_Y: {
+	#				pos1:
+	#					{
+	#						exp: y/n,
+	#						prob: >|<0.5
+	#						...
+	#					},
+	#				pos2:
+	#					{
+	#						exp: y/n,
+	#						prob: >|<0.5
+	#						...
+	#					}
+	#				...
+	#	}
+	#	...
+	#}
