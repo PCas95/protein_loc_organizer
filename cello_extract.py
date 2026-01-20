@@ -1,13 +1,16 @@
 #!/usr/bin/env python
 
 # cello_extract.py
-__version__ = '1.3.0'
+__version__ = '1.26.01'
 
 # manage libraries
 import argparse, sys, os, re
 from datetime import datetime
+from common_utils import id_reader as id_reader
+
 
 # define functions
+
 ## saves output table in standardised format
 def save_output(ofi: str, ret_obj: dict):
 	"""
@@ -24,6 +27,7 @@ def save_output(ofi: str, ret_obj: dict):
 					if q == 'RESULTS':
 						for e in w:
 							print(str(k), str(ret_obj[k]['PROTEIN']), str("\t".join(e)), sep="\t", file=out)
+
 
 ## removes empty lines / dirty lines from file
 def strip_non_data_lines(file: list[str]) -> list[str]:
@@ -42,8 +46,10 @@ def strip_non_data_lines(file: list[str]) -> list[str]:
 			return file[i:]
 	return[] # if no SeqID found, return empty list
 
+
 ## exports tmp output table - to be used with Proteus wrapper
 def exp_tmp(ret_obj: dict):
+	# will become outdated with next wrapper release (will use run())
 	"""
 	Takes a DICTIONARY and saves it running save_output() function with alternate parameters.
 	
@@ -54,7 +60,7 @@ def exp_tmp(ret_obj: dict):
 
 
 # main scripts
-def run(input_path: str, output: str | None = None):
+def run(input_path: str, idlist: str, output: str | None = None):
 	"""
 	Parses a CELLO plain-text output file and returns a structured dictionary.
 	Takes 2 STRINGs (path to files): reads input from STRING 1 and saves processed file to output (STRING 2).
@@ -68,9 +74,13 @@ def run(input_path: str, output: str | None = None):
 		dc (dict): Extracted and cleaned data (dict object) from input file, ready for print to output table.
 	"""
 
+	# process SeqID file
+	with open(idlist, 'r') as l:
+		seqIDs = [ id_reader(line) for line in l ]
+
 	# process input file
 	## read whole file
-	with open(args.input, 'r') as fh:
+	with open(input_path, 'r') as fh:
 		file = strip_non_data_lines(fh.readlines()) # removes any unwanted line from the top
 
 	entries = dict() # initialise dictionary for clean lines
@@ -79,7 +89,7 @@ def run(input_path: str, output: str | None = None):
 	for line in file:
 		sline = line.strip()
 		if line.startswith('SeqID'):
-			k = re.search(r'^SeqID: [a-zA-Z0-9\|_]*', line)
+			k = re.search(r'^SeqID: [a-zA-Z0-9\|_]*', line) ### <-- QUI
 			if not k:
 				continue
 			current_key = k.group(0) # after removing whitespace, initialises key when SeqID is found
@@ -120,7 +130,7 @@ def run(input_path: str, output: str | None = None):
 		raise ValueError(f"ERROR: No matched SeqIDs in input file.\nPlease check your input or run '{os.path.basename(__file__)} -h' for help.")
 
 	if output:
-		save_output(args.output, tables)
+		save_output(output, tables)
 
 	return tables
 
@@ -131,14 +141,15 @@ def main():
 	outName = 'cello_results_' + str(date.strftime('%Y-%m-%d_%H-%M-%S')) + '.tsv'
 
 	# set up arguments and help
-	parser = argparse.ArgumentParser(prog='cello_extract.py', description='Extracts data from CELLO plain text output and creates a tsv table with the prediction results.\
+	parser = argparse.ArgumentParser(prog='cello_extract.py', description='Extracts data from CELLO plain text raw output and creates a TSV table with the prediction results.\
 		Usage: python3 cello_extract.py -i <input_file> -o <output_file.csv>')
 	parser.add_argument('-i', '--input', help='A plain text file with CELLO output. Can have results for multiple protein accession numbers, separated by the line of * used by CELLO.', required=True)
+	parser.add_argument('-l', '--idlist', help='A single column, plain text table with all SeqIDs to extract.', required=True)
 	parser.add_argument('-o', '--output', default=outName, help='A file or path and file name for the output csv table. Default: cello_results_date_time.tsv in current directory.')
 	args = parser.parse_args()
 
 	try:
-		tables = run(args.input, args.output):
+		tables = run(args.input, args.output)
 	except (FileNotFoundError, ValueError) as e:
 		print(f'ERROR: {e}', file=sys.stderr)
 		return 1
