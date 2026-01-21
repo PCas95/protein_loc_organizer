@@ -9,7 +9,13 @@ from datetime import datetime
 from common_utils import id_reader as id_reader
 
 
-# define functions
+# global vars
+err_msg = f'[ERROR] Could not retreive the specified SeqIDs from file.\n\
+Please check the input files or run {os.path.basename(__file__)} -h for help.'
+silent = False
+
+
+# functions
 
 ## saves output table in standardised format
 def save_output(ofi: str, ret_obj: dict):
@@ -32,10 +38,11 @@ def save_output(ofi: str, ret_obj: dict):
 ## removes empty lines / dirty lines from file
 def strip_non_data_lines(file: list[str]) -> list[str]:
 	"""
-	Takes a LIST of STRINGs and filters out non-matching strings. Returns LIST of STRINGs.
+	Takes a LIST of STRINGs and filters out non-matching strings.
+	Returns LIST of STRINGs.
 	
 	Args:
-		file (list): List of strings (input file read with .readlines())
+		file (list): List of strings (input file from .readlines())
 		ret_obj (dict): Nested dictionary
 
 	Returns:
@@ -44,7 +51,38 @@ def strip_non_data_lines(file: list[str]) -> list[str]:
 	for i, s in enumerate(file):
 		if re.search("SeqID:", s):
 			return file[i:]
-	return[] # if no SeqID found, return empty list
+	return [] # if no SeqID found, return empty list
+
+
+## matches lines with id (exact match or alternative id)
+def find_id(ids, line):
+	"""
+	Takes a LIST and a STRING; returns the same STRING and the item from list if the latter is exact or alternative substring.
+	
+	Args:
+		ids (list[str]): list of ids (strings)
+		line (str): line from file
+	Returns:
+		str: input line
+		str | None: string item from input list if it's a substring of line, otherwise None
+	"""
+	for i in ids:
+		found = False
+		if i in line:
+			found = True
+			return i, line
+
+		if not found:
+			head, tail = i.rsplit("_", 1)
+			alt = f'{head.replace("_", "|")}_{tail}'
+			if alt in line:
+				found = True
+				return i, line
+			else:
+				continue
+		
+		if not found:
+			return None, line
 
 
 ## exports tmp output table - to be used with Proteus wrapper
@@ -75,44 +113,61 @@ def run(input_path: str, idlist: str, output: str | None = None):
 	"""
 
 	# process SeqID file
-	with open(idlist, 'r') as l:
-		seqIDs = [ id_reader(line) for line in l ]
-
+	with open(idlist, 'r') as lst:
+		seqIDs = [ id_reader(l) for l in lst ]
+	
 	# process input file
 	## read whole file
 	with open(input_path, 'r') as fh:
-		file = strip_non_data_lines(fh.readlines()) # removes any unwanted line from the top
+		### remove any unwanted line from the top
+		file = strip_non_data_lines(fh.readlines())
 
-	entries = dict() # initialise dictionary for clean lines
-
-	current_key = None
+	## initialise dictionary for clean lines
+	entries = dict()
+	#current_key = None
+	## process lines
 	for line in file:
 		sline = line.strip()
-		if line.startswith('SeqID'):
-			k = re.search(r'^SeqID: [a-zA-Z0-9\|_]*', line) ### <-- QUI
+		### retrieve seqid line
+		if sline.startswith('SeqID'):
+			sline.split(' ')[1]
+			k, id_string = find_id(seqIDs, sline)
 			if not k:
 				continue
-			current_key = k.group(0) # after removing whitespace, initialises key when SeqID is found
-			entries[current_key] = []
-
+			elif k and id_string:
+				if not silent:
+					print(f'[INFO] Processing entry {k}...')
+				#### initialises key when SeqID is found
+				entries[k] = []
+				#current_key = k
+		### skip empty/non data lines
 		if not sline or sline.startswith('*****'):
 			continue
-		if current_key is None:
-			continue
+		#if current_key is None:
+			#continue
+		### append data lines, separate by entry
 		entries[k].append(sline) # append lines after a SeqID to the that key's list
+		if not silent:
+			print(f'[INFO] Found prediction results for {k}')
+	# throw error if no entry matched
+	if len(entries.keys()) == 0:
+		raise ValueError(err_msg)
+
 
 	# extract CELLO results for each query
 	## prepare global variables: dictionary for output and RegExes to match lines SeqID, protein and prediction results
 	tables = dict()
 	## main loop: for each query result in plain text, split into lines and match only lines of interest
-	for _,v in entries.items():
+	if not silent:
+		print(f'[INFO] Building TSV table...')
+	for k,v in entries.items():
 		for i in v:
 			results = []
 			### extraction of SeqID and identified protein
 			if i.startswith('SeqID'):
-				id_string = re.match(r'^(SeqID: ).+\|([A-Za-z0-9_]+)\|([^ ]*)', i)
-				id_prot = id_string.group(2)
-				tables[id_prot] = {'PROTEIN': id_prot, 'RESULTS': []}
+				prot_desc = i.lstrip('SeqID: ')
+				tables[k] = {'PROTEIN': prot_desc, 
+							'RESULTS': []}
 			### extraction of prediction results
 			elif re.match(r'^[A-Za-z]+\s+[0-9].+$', i):
 				pred_score_loc = re.match(r'^([A-Za-z]+)\s+([0-9].+)$', i)
@@ -121,13 +176,12 @@ def run(input_path: str, idlist: str, output: str | None = None):
 
 				pred = loc if pred_score_loc.group(2).split(' ')[-1] == '*' else ''
 				
-				tables[id_prot]['RESULTS'].append([loc, score, pred])
+				tables[k]['RESULTS'].append([loc, score, pred])
 			### skip other lines
 			else:
 				continue
-
 	if not tables or len(tables.keys()) == 0:
-		raise ValueError(f"ERROR: No matched SeqIDs in input file.\nPlease check your input or run '{os.path.basename(__file__)} -h' for help.")
+		raise ValueError(err_msg)
 
 	if output:
 		save_output(output, tables)
@@ -136,6 +190,7 @@ def run(input_path: str, idlist: str, output: str | None = None):
 
 
 def main():
+
 	# set default output name
 	date = datetime.now()
 	outName = 'cello_results_' + str(date.strftime('%Y-%m-%d_%H-%M-%S')) + '.tsv'
@@ -149,9 +204,11 @@ def main():
 	args = parser.parse_args()
 
 	try:
-		tables = run(args.input, args.output)
+		tables = run(args.input, args.idlist, args.output)
+		print(f"[INFO] Finished. Output file is {args.output}" if os.path.exists(args.output) else "[ERROR] Failed to write output file.")
+		return 0
 	except (FileNotFoundError, ValueError) as e:
-		print(f'ERROR: {e}', file=sys.stderr)
+		print(f'[ERROR] {e}', file=sys.stderr)
 		return 1
 
 

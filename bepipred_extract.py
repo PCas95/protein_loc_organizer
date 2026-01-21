@@ -9,6 +9,7 @@ from datetime import datetime
 from itertools import groupby
 from operator import itemgetter
 
+# global vars
 i = None
 s = None
 silent = False
@@ -24,6 +25,8 @@ Please check that:\n\
 	2. your table doesn't have a poorly formatted or absent header\n\
 	3. the field separator for this table matches the default separator or the separator being passed (run bepipred_extract.py --help)"
 
+
+# functions
 def header_error():
 	raise ValueError(head_error_message)
 
@@ -151,6 +154,7 @@ def exp_tmp(ret_obj: dict):
 	save_output('bepipred.tmp', ret_obj, tmp_header)
 
 
+# main functions
 def run(input_path: str, sep: str, output: str | None = None) -> dict:
 
 	# read and process file to extract aminoacid positions from each protein, the SeqIDs and the values in their columns
@@ -192,11 +196,13 @@ def main():
 	parser.add_argument('-o', '--output', default=outName, help='Optional: a file or path and file name for the output csv table. Default: bepipred_results_date_time.csv in current directory.')
 	args = parser.parse_args()
 
-	run(args.input, args.separator, args.output)
-
-	# print exit message and exit
-	print(f"[INFO] Finished. Output file is {args.output}" if os.path.exists(args.output) else "Failed to write output file.")
-	return 0
+	try:
+		run(args.input, args.separator, args.output)
+		print(f"[INFO] Finished. Output file is {args.output}" if os.path.exists(args.output) else "[ERROR] Failed to write output file.")
+		return 0
+	except (FileNotFoundError, ValueError) as e:
+		print(f'[ERROR] {e}', file=sys.stderr)
+		return 1
 
 
 if __name__ == "__main__":
