@@ -6,12 +6,12 @@ __version__ = '1.26.01'
 # manage libraries
 import argparse, sys, os, re
 from datetime import datetime
-from common_utils import id_reader as id_reader
+from common_utils import id_reader, find_id
 
 
 # global vars
 err_msg = f'[ERROR] Could not retreive the specified SeqIDs from file.\n\
-Please check the input files or run {os.path.basename(__file__)} -h for help.'
+Please check the input file and the ID formats or run {os.path.basename(__file__)} -h for help.'
 silent = False
 
 
@@ -54,37 +54,6 @@ def strip_non_data_lines(file: list[str]) -> list[str]:
 	return [] # if no SeqID found, return empty list
 
 
-## matches lines with id (exact match or alternative id)
-def find_id(ids, line):
-	"""
-	Takes a LIST and a STRING; returns the same STRING and the item from list if the latter is exact or alternative substring.
-	
-	Args:
-		ids (list[str]): list of ids (strings)
-		line (str): line from file
-	Returns:
-		str: input line
-		str | None: string item from input list if it's a substring of line, otherwise None
-	"""
-	for i in ids:
-		found = False
-		if i in line:
-			found = True
-			return i, line
-
-		if not found:
-			head, tail = i.rsplit("_", 1)
-			alt = f'{head.replace("_", "|")}_{tail}'
-			if alt in line:
-				found = True
-				return i, line
-			else:
-				continue
-		
-		if not found:
-			return None, line
-
-
 ## exports tmp output table - to be used with Proteus wrapper
 def exp_tmp(ret_obj: dict):
 	# will become outdated with next wrapper release (will use run())
@@ -114,7 +83,8 @@ def run(input_path: str, idlist: str, output: str | None = None):
 
 	# process SeqID file
 	with open(idlist, 'r') as lst:
-		seqIDs = [ id_reader(l) for l in lst ]
+		seqIDs = [ l.rstrip() for l in lst.readlines() ]
+		#seqIDs = [ id_reader(l) for l in lst ]
 	
 	# process input file
 	## read whole file
