@@ -4,7 +4,7 @@
 __version__ = '1.26.01'
 
 # manage libraries
-import argparse, sys, os, re
+import argparse, sys, os
 from datetime import datetime
 from common_utils import id_reader, find_id
 
@@ -94,13 +94,11 @@ def run(input_path: str, idlist: str, output: str | None = None):
 
 	## initialise dictionary for clean lines
 	entries = dict()
-	#current_key = None
 	## process lines
 	for line in file:
 		sline = line.strip()
 		### retrieve seqid line
 		if sline.startswith('SeqID'):
-			sline.split(' ')[1]
 			k, id_string = find_id(seqIDs, sline)
 			if not k:
 				continue
@@ -113,8 +111,6 @@ def run(input_path: str, idlist: str, output: str | None = None):
 		### skip empty/non data lines
 		if not sline or sline.startswith('*****'):
 			continue
-		#if current_key is None:
-			#continue
 		### append data lines, separate by entry
 		entries[k].append(sline) # append lines after a SeqID to the that key's list
 		if not silent:
@@ -166,8 +162,7 @@ def main():
 	outName = 'cello_results_' + str(date.strftime('%Y-%m-%d_%H-%M-%S')) + '.tsv'
 
 	# set up arguments and help
-	parser = argparse.ArgumentParser(prog='cello_extract.py', description='Extracts data from CELLO plain text raw output and creates a TSV table with the prediction results.\
-		Usage: python3 cello_extract.py -i <input_file> -o <output_file.csv>')
+	parser = argparse.ArgumentParser(prog='cello_extract.py', description='Extracts data from CELLO plain text raw output and creates a TSV table with the prediction results.')
 	parser.add_argument('-i', '--input', help='A plain text file with CELLO output. Can have results for multiple protein accession numbers, separated by the line of * used by CELLO.', required=True)
 	parser.add_argument('-l', '--idlist', help='A single column, plain text table with all SeqIDs to extract.', required=True)
 	parser.add_argument('-o', '--output', default=outName, help='A file or path and file name for the output csv table. Default: cello_results_date_time.tsv in current directory.')
