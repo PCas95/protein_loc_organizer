@@ -3,8 +3,8 @@
 # lipop_extract.py
 __version__ = '1.26.01'
 
-# manage libraries
-import argparse, sys, os, re #[CHANGE]
+# libraries
+import argparse, sys, os
 from datetime import datetime
 from common_utils import id_reader, find_id
 
