@@ -10,7 +10,7 @@ from common_utils import id_reader, find_id
 
 
 # global vars
-err_msg = f'[ERROR] Could not retreive the specified SeqIDs from file.\n\
+err_msg = f'Could not retrieve the specified SeqIDs from file.\n\
 Please check the input file and the ID formats or run {os.path.basename(__file__)} -h for help.'
 silent = False
 
@@ -27,12 +27,12 @@ def save_output(ofi: str, ret_obj: dict):
 		ret_obj (dict): Nested dictionary
 	"""
 	with open(ofi, 'w') as out:
-			print('SeqID', 'PROTEIN', 'LOCALIZATION', 'SCORE', 'PREDICTION', sep="\t", file=out)
-			for k in ret_obj.keys():
-				for q,w in ret_obj[k].items():
-					if q == 'RESULTS':
-						for e in w:
-							print(str(k), str(ret_obj[k]['PROTEIN']), str("\t".join(e)), sep="\t", file=out)
+		print('SeqID', 'PROTEIN', 'LOCALIZATION', 'SCORE', 'PREDICTION', sep="\t", file=out)
+		for k in ret_obj.keys():
+			for q,w in ret_obj[k].items():
+				if q == 'RESULTS':
+					for e in w:
+						print(str(k), str(ret_obj[k]['PROTEIN']), str("\t".join(e)), sep="\t", file=out)
 
 
 ## removes empty lines / dirty lines from file
@@ -49,36 +49,24 @@ def strip_non_data_lines(file: list[str]) -> list[str]:
 		list[str]: list of filtered strings (file lines)
 	"""
 	for i, s in enumerate(file):
-		if re.search("SeqID:", s):
+		if 'SeqID:' in s:
 			return file[i:]
-	return [] # if no SeqID found, return empty list
-
-
-## exports tmp output table - to be used with Proteus wrapper
-def exp_tmp(ret_obj: dict):
-	# will become outdated with next wrapper release (will use run())
-	"""
-	Takes a DICTIONARY and saves it running save_output() function with alternate parameters.
-	
-	Args:
-		ret_obj (dict): Returned dictionary from main script
-	"""
-	save_output('cello.tmp', ret_obj)
+	return []
 
 
 # main scripts
-def run(input_path: str, idlist: str, output: str | None = None):
+def run(input_path: str, idlist: str, output: str | None = None) -> dict:
 	"""
-	Parses a CELLO plain-text output file and returns a structured dictionary.
-	Takes 2 STRINGs (path to files): reads input from STRING 1 and saves processed file to output (STRING 2).
-	Output STRING can be None (when launched by wrapper). Default: None.
+	Takes 3 STRINGs (path to files): reads input from STRING 1, ids from STRING 2, saves processed file to output (STRING 3).
+	Returns a structured dictionary.
 	
 	Args:
 		input_path (str): Path to input file
+		idlist (str): Path to seqids file
 		output (str | None): Path to output file or None. Default: None.
 
 	Returns:
-		dc (dict): Extracted and cleaned data (dict object) from input file, ready for print to output table.
+		dc (dict): Extracted and cleaned data (dict object) from input file.
 	"""
 
 	# process SeqID file
@@ -101,18 +89,21 @@ def run(input_path: str, idlist: str, output: str | None = None):
 		if sline.startswith('SeqID'):
 			k, id_string = find_id(seqIDs, sline)
 			if not k:
+				current_key = None
 				continue
-			elif k and id_string:
+			current_key = k
+			if k and id_string:
 				if not silent:
 					print(f'[INFO] Processing entry {k}...')
 				#### initialises key when SeqID is found
 				entries[k] = []
-				#current_key = k
 		### skip empty/non data lines
 		if not sline or sline.startswith('*****'):
 			continue
+		if current_key is None:
+			continue
 		### append data lines, separate by entry
-		entries[k].append(sline) # append lines after a SeqID to the that key's list
+		entries[k].append(sline)
 		if not silent:
 			print(f'[INFO] Found prediction results for {k}')
 	# throw error if no entry matched

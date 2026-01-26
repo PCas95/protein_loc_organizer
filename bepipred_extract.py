@@ -9,6 +9,16 @@ from datetime import datetime
 from itertools import groupby
 from operator import itemgetter
 
+
+# classes
+## custom error classes
+class HeaderFormatError(ValueError):
+	"""Malformed PSortB SHORT output"""
+
+class SeqIDNotFoundError(ValueError):
+	"""No matching SeqIDs found in input"""
+
+
 # global vars
 i = None
 s = None
@@ -17,20 +27,12 @@ silent = False
 sep = ','
 outSep = "\t"
 description = "bepipred_extract.py extracts epitopes exposed to solvent from Bepipred output and creates a TSV table with the prediction results.\nThe epitope is considered exposed if: 1) epitope probability >= 0.5; 2) exposed/buried == E; 3) >= 4 consecutive aminoacids meet conditions 1 and 2."
-
-
-head_error_message = "ERROR: header of input table does not match that of Bepipred's output.\n\
-Please check that:\n\
-	1. you are providing a valid Bepipred output table\n\
-	2. your table doesn't have a poorly formatted or absent header\n\
-	3. the field separator for this table matches the default separator or the separator being passed (run bepipred_extract.py --help)"
+head_err_msg = f'Malformed Bepipred header. Please check your input or run {os.path.basename(__file__)} -h for help.'
+seq_err_msg = f"Could not retrieve any sequence ID from input file.\n\
+	Please double check input (Bepipred's csv output) and separator (default ',') or run {os.path.basename(__file__)} -h for help."
 
 
 # functions
-def header_error():
-	raise ValueError(head_error_message)
-
-
 def initialiser(i: str, s: str, dc: dict) -> list:
 	"""
 	Takes a PATH to file, a STRING and an empty DICTIONARY. Returns a header as LIST and updates the DICTIONARY.
@@ -46,9 +48,9 @@ def initialiser(i: str, s: str, dc: dict) -> list:
 		header = fh.readline().rstrip().split(s)
 		try:
 			if header[0] != 'Entry' or header[1] != 'Position' or header[2] != 'AminoAcid' or header[3] != 'Exposed/Buried':
-				header_error()
+				raise HeaderFormatError(head_err_msg)
 		except IndexError:
-			header_error()
+			raise HeaderFormatError(head_err_msg)
 
 		for line in fh.readlines():
 			cols = line.rstrip().split(s)
@@ -140,20 +142,6 @@ def save_output(ofi: str, ret_obj: dict, header: list):
 	return n_lines
 
 
-def exp_tmp(ret_obj: dict):
-	# probably will be outdated on next wrapper release (which will use run())
-	"""
-	Takes a nested DICTIONARY and runs function with custom params.
-	
-	Args:
-		ret_obj (dict): input nested dictionary
-	"""
-	global silent
-	silent = True
-	tmp_header = initialiser(i, s, ret_obj)
-	save_output('bepipred.tmp', ret_obj, tmp_header)
-
-
 # main functions
 def run(input_path: str, sep: str, output: str | None = None) -> dict:
 
@@ -165,9 +153,7 @@ def run(input_path: str, sep: str, output: str | None = None) -> dict:
 
 	# kill script and throw error if input is not a valid file or no SeqIDs are found
 	if len(dc.keys()) == 0:
-		raise ValueError(f"ERROR: could not retrieve any sequence ID from input file.\n\
-		Please ensure the input is Bepipred's csv output and that you are specifying \
-		the correct separator (default ',', check manual with {os.path.basename(__file__)} --help)")
+		raise SeqIDNotFoundError(seq_err_msg)
 
 	# extract AAs exposed to solvent and create filtered output table
 	# criteria: epitope probability >= 0.5 & exposed/buried == E & consecutive aminoacids >= 4

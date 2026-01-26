@@ -80,18 +80,6 @@ def missing_data(dc: dict) -> list[str]:
 	return err_list
 
 
-## exports tmp output table - to be used with Proteus wrapper
-def exp_tmp(ret_obj: dict):
-	# will become outdated after refactoring
-	"""
-	Takes a DICTIONARY and saves it running save_output() function with alternate parameters.
-	
-	Args:
-		ret_obj (dict): Returned dictionary from main script
-	"""
-	save_output('lipop.tmp', ret_obj)
-
-
 # main scripts
 def run(input_path: str, idlist: str, output: str | None = None) -> tuple[dict, list[str]]:
 	"""

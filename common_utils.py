@@ -27,12 +27,14 @@ def find_id(ids, line):
 		str | None: string item from input list if it's a substring of line, otherwise None
 	"""
 	for i in ids:
-
-		alt = id_reader(i) if ('|' in i or i.startswith('>')) else None
+		
+		alt = id_reader(i) if ('|' in i or ' ' in i or i.startswith('>')) else None
 
 		if i in line:
 			return i, line
 		elif alt and alt in line:
-			return i, line
+			return alt, line
+		elif alt and alt in id_reader(line):
+			return alt, line
 	
 	return None, line
