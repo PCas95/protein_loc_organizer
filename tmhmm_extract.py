@@ -29,7 +29,10 @@ header_map = {'len': 'Length',
 
 # functions
 ## saves output table in standardised format
-def save_output(ofi: str, ret_obj: dict[list]):
+def save_output(ofi: str, ret_obj: list[list]):
+
+
+"""
 	## get full column range for output table
 	nCol_max = 0
 	id_max_col = ''
@@ -44,6 +47,7 @@ def save_output(ofi: str, ret_obj: dict[list]):
 		for c in ret_obj.keys():
 			values = [ret_obj[c][x] for x in list(ret_obj[id_max_col].keys())]
 			print(c, *values, sep="\t", file=out)
+"""
 
 
 ## warning/error check function
@@ -64,6 +68,38 @@ def checkers(dc: dict):
 		with open(warnings, 'w') as wf:
 			for e in errList:
 				print(e, file=wf)
+
+
+def d_processor(token: str, dc: dict) -> list[list]:
+	"""
+	Takes a STRING and a nested DICTIONARY. Processes DICTIONARY depending on string token and returns a LIST of lines.
+
+	Args:
+		token (str): 'one' -> from oneperline format; 'ext' -> from extensive format
+		dc (dict): dict[dict] from extensive or dict[list] 
+		output (str | None): Path to output file or None. Default: None.
+	"""
+	o_lines = []
+	if token == 'ext':
+
+		tmp_inn = next(iter(dc.values()))
+		header = ['SeqID'] + [ item for item in tmp_inn.keys() if isinstance(tmp_inn, dict) ]
+		o_lines.append(header)
+
+		for k,v in dc.items():
+			line = [k] + [ v[i] for i in header[1:] ]
+			o_lines.append(line)
+
+	elif token == 'one':
+		
+		header = ['SeqID', 'Protein'] + [ key for item in next(iter(dc.values())) if isinstance(item, tuple) for key in [item[0]] ]
+		o_lines.append(header)
+		
+		for k,v in dc.items():
+			line = [k, v[0]] + [ i[-1] for i in v if isinstance(i, tuple) ]
+			o_lines.append(line)
+
+	return o_lines
 
 
 def extract_extensive(seqids: list[str], lines: list[str]) -> dict[list]:
@@ -108,29 +144,7 @@ def extract_extensive(seqids: list[str], lines: list[str]) -> dict[list]:
 	for inner in dc.values():
 		inner.setdefault('NOTE', 'NA') 
 
-	return dc
-'''
-# --------------- these go in extract_extensive()
-	# process lines of each extracted query and transform into a table
-	loc = ['inside', 'outside', 'TMhelix'] # set up strings for recognition of domain line
-	table = dict()
-	for k,v in cleaned_file.items():
-		table[k] = dict()
-		lastCol = '' 
-		for i in v:
-			if loc[0] in i or loc[1] in i or loc[2] in i : # extract domain line
-				lastCol = lastCol + i.split("\t")[-2] + ': ' + i.split("\t")[-1].lstrip().split(' ')[0] + '-' + i.split("\t")[-1].lstrip().split(' ')[-1] + '; '
-				table[k]['Domains'] = lastCol
-			elif ':' in i: # extract data lines
-				value = i.split(' ')[-1]
-				key = ' '.join(i.split(' ')[1:-1]).rstrip().rstrip(':').replace(',', '')
-				table[k][key] = value
-			else: # extract extra feature line (not always present)
-				key = 'NOTE'
-				table[k][key] = ' '.join(i.split(' ')[2:])
-		if 'NOTE' not in list(table[k].keys()): # manage column for extra feature when data is absent
-			table[k]['NOTE'] = 'NA'
-'''
+	return 'ext', dc
 
 
 def extract_oneperline(seqids: list[str], lines: list[str], cols: dict[str]) -> dict[list]:
@@ -153,7 +167,7 @@ def extract_oneperline(seqids: list[str], lines: list[str], cols: dict[str]) -> 
 				print(f'[INFO] Found prediction for {sid}')
 			dc[sid] = [ tuple(i.split('=')) if '=' in i else i for i in fields ]
 
-	return dc
+	return 'one', dc
 
 
 # main scripts
@@ -178,15 +192,15 @@ def run(input_path: str, idlist: str, output: str | None = None):
 	elif whole_file and any(line.startswith('#') for line in whole_file):
 		if not silent:
 			print('[INFO] \'#\' characters detected. Executing for extensive format...')
-		dc = extract_extensive(seqids, whole_file)
+		token, dc = extract_extensive(seqids, whole_file)
 	else:
 		if not silent:
 			print('[INFO] Executing for format \'One protein per line\'...')
-		dc = extract_oneperline(seqids, whole_file, header_map)
+		token, dc = extract_oneperline(seqids, whole_file, header_map)
 
-	print(dc)
-	sys.exit()
-	if len(dc.keys()) == 0:
+	out_table = d_processor(token, dc)
+
+	if len(out_table) <= 2:
 		raise SeqIDNotFoundError('No match for SeqIDs. Please check the input files.')
 
 	if output:
@@ -204,7 +218,6 @@ def main():
 	parser.add_argument('-o', '--output', default=outName, help='Optional: a file or path and file name for the output tsv table. Default: tmhmm_results_short_date_time.csv in current directory.')
 	args = parser.parse_args()
 
-
 	try:
 		run(args.input, args.idlist, args.output)
 
@@ -213,6 +226,9 @@ def main():
 	except (FileNotFoundError, ValueError) as e:
 		print(f'[ERROR] {e}', file=sys.stderr)
 		return 1
+	except (IndexError, KeyError, TypeError) as e:
+		print(f'[ERROR] {e}', file=sys.stderr)
+		return 2
 
 '''
 
