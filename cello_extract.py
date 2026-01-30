@@ -4,9 +4,15 @@
 __version__ = '1.26.01'
 
 # manage libraries
-import argparse, sys, os
+import argparse, sys, os, re
 from datetime import datetime
 from common_utils import id_reader, find_id
+
+
+# classes
+# custom error classes
+class DataLineError(ValueError):
+	"""Malformed data line with prediction metrics"""
 
 
 # global vars
@@ -16,7 +22,6 @@ silent = False
 
 
 # functions
-
 ## saves output table in standardised format
 def save_output(ofi: str, ret_obj: dict):
 	"""
@@ -26,16 +31,27 @@ def save_output(ofi: str, ret_obj: dict):
 		ofi (str): Path to output file
 		ret_obj (dict): Nested dictionary
 	"""
+	inner_keys = set()
+	for _, inner in ret_obj.items():
+		if isinstance(inner, dict):
+			inner_keys.update(inner.keys())
+
+	first_col = 'SeqID'
+	second_col = 'Protein'
+	pred_col = 'Prediction'
+	loc_cols = sorted(k for k in inner_keys if k != pred_col and k != second_col)
+	cols: List[str] = [first_col, second_col] + loc_cols + [pred_col]
+	
 	with open(ofi, 'w') as out:
-		print('SeqID', 'PROTEIN', 'LOCALIZATION', 'SCORE', 'PREDICTION', sep="\t", file=out)
-		for k in ret_obj.keys():
-			for q,w in ret_obj[k].items():
-				if q == 'RESULTS':
-					for e in w:
-						print(str(k), str(ret_obj[k]['PROTEIN']), str("\t".join(e)), sep="\t", file=out)
+		print(*cols, sep="\t", file=out)
+		for k,v in ret_obj.items():
+			scores = [ v[i] for i in loc_cols if i in v.keys() ]
+			output_line = [k, v[second_col], *scores, ';'.join(v[pred_col])]
+			print(*output_line, sep="\t", file=out)
 
 
-## removes empty lines / dirty lines from file
+
+## removes empty/dirty lines from file
 def strip_non_data_lines(file: list[str]) -> list[str]:
 	"""
 	Takes a LIST of STRINGs and filters out non-matching strings.
@@ -43,111 +59,72 @@ def strip_non_data_lines(file: list[str]) -> list[str]:
 	
 	Args:
 		file (list): List of strings (input file from .readlines())
-		ret_obj (dict): Nested dictionary
 
 	Returns:
-		list[str]: list of filtered strings (file lines)
+		list[str]: list of filtered strings (file lines of interest)
 	"""
-	for i, s in enumerate(file):
-		if 'SeqID:' in s:
-			return file[i:]
-	return []
+	data = []
+	for l in file:
+		if l.startswith('SeqID') or re.fullmatch(r'^[A-Za-z]+\t[0-9\.\s\*]+', l):
+			data.append(l)
+	return data
 
 
 # main scripts
 def run(input_path: str, idlist: str, output: str | None = None) -> dict:
-	"""
-	Takes 3 STRINGs (path to files): reads input from STRING 1, ids from STRING 2, saves processed file to output (STRING 3).
-	Returns a structured dictionary.
-	
-	Args:
-		input_path (str): Path to input file
-		idlist (str): Path to seqids file
-		output (str | None): Path to output file or None. Default: None.
 
-	Returns:
-		dc (dict): Extracted and cleaned data (dict object) from input file.
-	"""
-
-	# process SeqID file
+	# read from files
 	with open(idlist, 'r') as lst:
 		seqIDs = [ l.rstrip() for l in lst.readlines() ]
-		#seqIDs = [ id_reader(l) for l in lst ]
-	
-	# process input file
-	## read whole file
+
 	with open(input_path, 'r') as fh:
-		### remove any unwanted line from the top
-		file = strip_non_data_lines(fh.readlines())
+		file = [ line.strip() for line in fh.readlines() ]
+	
+	# initialise variables for loop
+	dc = dict()
+	current_seqid = None
 
-	## initialise dictionary for clean lines
-	entries = dict()
-	## process lines
-	for line in file:
-		sline = line.strip()
-		### retrieve seqid line
-		if sline.startswith('SeqID'):
-			k, id_string = find_id(seqIDs, sline)
-			if not k:
-				current_key = None
+	# parse clean lines
+	for i in strip_non_data_lines(file):
+		## extract ID line
+		if i.startswith('SeqID'):
+			k, p_desc = find_id(seqIDs, i.lstrip('SeqID: '))
+			if k is None:
+				current_seqid = None
 				continue
-			current_key = k
-			if k and id_string:
-				if not silent:
-					print(f'[INFO] Processing entry {k}...')
-				#### initialises key when SeqID is found
-				entries[k] = []
-		### skip empty/non data lines
-		if not sline or sline.startswith('*****'):
-			continue
-		if current_key is None:
-			continue
-		### append data lines, separate by entry
-		entries[k].append(sline)
-		if not silent:
-			print(f'[INFO] Found prediction results for {k}')
-	# throw error if no entry matched
-	if len(entries.keys()) == 0:
-		raise ValueError(err_msg)
 
+			if not silent:
+				print(f'[INFO] Found data section for {k}')
 
-	# extract CELLO results for each query
-	## prepare global variables: dictionary for output and RegExes to match lines SeqID, protein and prediction results
-	tables = dict()
-	## main loop: for each query result in plain text, split into lines and match only lines of interest
-	if not silent:
-		print(f'[INFO] Building TSV table...')
-	for k,v in entries.items():
-		for i in v:
-			results = []
-			### extraction of SeqID and identified protein
-			if i.startswith('SeqID'):
-				prot_desc = i.lstrip('SeqID: ')
-				tables[k] = {'PROTEIN': prot_desc, 
-							'RESULTS': []}
-			### extraction of prediction results
-			elif re.match(r'^[A-Za-z]+\s+[0-9].+$', i):
-				pred_score_loc = re.match(r'^([A-Za-z]+)\s+([0-9].+)$', i)
-				loc = pred_score_loc.group(1).lstrip()
-				score = pred_score_loc.group(2).split(' ')[0]
+			### create dictionary key-value pair and populate with protein info 
+			dc[k] = dict()
+			dc[k]['Protein'] = p_desc
+			current_seqid = k
 
-				pred = loc if pred_score_loc.group(2).split(' ')[-1] == '*' else ''
-				
-				tables[k]['RESULTS'].append([loc, score, pred])
-			### skip other lines
-			else:
+		else:
+			## safety check
+			if current_seqid is None:
 				continue
-	if not tables or len(tables.keys()) == 0:
-		raise ValueError(err_msg)
+
+			## extract data line and store in dictionary
+			data_line = re.sub(r'\s+', ' ', i).split(' ')
+
+			if len(data_line) < 2:
+				raise DataLineError('Malformed prediction data line(s).')
+			
+			localisation, score, *extra = data_line
+			pred = extra[0] if extra else None
+			if not silent:
+				print(f'[INFO] Processing prediction data line for {k}: {localisation}')
+			dc[k][localisation] = score
+			if pred is not None:
+				dc[k].setdefault('Prediction', []).append(localisation)
 
 	if output:
-		save_output(output, tables)
-
-	return tables
+		save_output(output, dc)
 
 
 def main():
-
 	# set default output name
 	date = datetime.now()
 	outName = 'cello_results_' + str(date.strftime('%Y-%m-%d_%H-%M-%S')) + '.tsv'

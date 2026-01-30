@@ -18,6 +18,9 @@ class UnreadableInputError(ValueError):
 class SeqIDNotFoundError(ValueError):
 	"""No matching SeqIDs found in input"""
 
+class ValNotFoundError(ValueError):
+	"""No metric found for SeqIDs"""
+
 
 # globals
 silent = False
@@ -30,41 +33,37 @@ header_map = {'len': 'Length',
 # functions
 ## saves output table in standardised format
 def save_output(ofi: str, ret_obj: list[list]):
-
-
-"""
-	## get full column range for output table
-	nCol_max = 0
-	id_max_col = ''
-	for x in ret_obj.keys():
-		current_nCol = len(ret_obj[x].keys())
-		if current_nCol > nCol_max:
-			nCol_max = current_nCol
-			id_max_col = x
-	## write table
+	
 	with open(ofi, 'w') as out:
-		print('SeqID', "\t".join(list(ret_obj[id_max_col].keys())), sep="\t", file=out)
-		for c in ret_obj.keys():
-			values = [ret_obj[c][x] for x in list(ret_obj[id_max_col].keys())]
-			print(c, *values, sep="\t", file=out)
-"""
+		for i in ret_obj:
+			row = [ ';'.join(x) if isinstance(x, list) else x for x in i ]
+			print(*row, sep="\t", file=out)
 
 
-## warning/error check function
-def checkers(dc: dict):
-	# produce warning log + message if there are no results for some SeqIDs
-	errList = []
-	for k in dc.keys():
-		if len(dc[k]) < 6:
-			errList.append(str(dc[k]))
-	if len(errList) == len(dc.keys()):
-		print('ERROR: It seems that none of the provided SeqIDs has TMHMM prediction metrics.\nPlease double check the input file.')
-		sys.exit(1)
+def checkers(lst: list[list]):
+	"""
+	Takes a LIST of LISTs, checks contents and raises custom errors if data is missing.
+
+	Args:
+		ls (list[list]): List of lists (rows, values in columns)  
+	"""
+
+	if len(lst) <= 2:
+		raise SeqIDNotFoundError('No match for SeqIDs. Please check the input files.')
+
+	errList = [ i[0] for i in lst if len(i) < 8 ]
+
+	if len(errList) == len(lst) - 1:
+		raise ValNotFoundError('TMHMM prediction metrics could not be found for the provided SeqIDs. Please double check the input file.')
+
 	elif errList == True:
 		warnings = f'warnings_tmhmm_{str(date.strftime('%Y-%m-%d_%H-%M-%S'))}.txt'
-		print(f'WARNING: One or more SeqIDs have no prediction metrics.\nPlease double check your TMHMM file to find out if you have missing data.\n\
-				The output table will be produced without SeqIDs for which metrics are absent.\n\
-				You can find the offending SeqIDs in: {warnings}')
+
+		if not silent:
+			print(f'[WARNING] Some SeqIDs have no prediction metrics.\nPlease check input file for missing data.\n\
+				SeqIDs without metrics will not be present in the output table.\n\
+				Offending SeqIDs: {warnings}')
+
 		with open(warnings, 'w') as wf:
 			for e in errList:
 				print(e, file=wf)
@@ -124,6 +123,7 @@ def extract_extensive(seqids: list[str], lines: list[str]) -> dict[list]:
 		if sid != None:
 			if not silent:
 				print(f'[INFO] Found prediction for {sid}')
+
 			dc[sid].setdefault('Protein', p_desc)
 
 			if any(val in sline for val in header_map.values()):
@@ -139,10 +139,14 @@ def extract_extensive(seqids: list[str], lines: list[str]) -> dict[list]:
 						domains.append(f'{dom}: {srt}-{end}')
 
 			else:
-				dc[sid]['NOTE'] = ' '.join(re.sub(r'\s+', ' ', sline).split(' ')[2:])
+				notes = dc[sid].setdefault('NOTE', [])
+				extracted = ' '.join(re.sub(r'\s+', ' ', sline).split(' ')[2:])
+				if extracted:
+					notes.append(extracted)
 
 	for inner in dc.values():
-		inner.setdefault('NOTE', 'NA') 
+		if not inner.get('NOTE'):
+			inner['NOTE'] = ['NA']
 
 	return 'ext', dc
 
@@ -199,12 +203,11 @@ def run(input_path: str, idlist: str, output: str | None = None):
 		token, dc = extract_oneperline(seqids, whole_file, header_map)
 
 	out_table = d_processor(token, dc)
-
-	if len(out_table) <= 2:
-		raise SeqIDNotFoundError('No match for SeqIDs. Please check the input files.')
+	checkers(out_table)
 
 	if output:
-		save_output(output, dc)
+		save_output(output, out_table)
+
 
 def main():
 	# set default output name
@@ -229,14 +232,6 @@ def main():
 	except (IndexError, KeyError, TypeError) as e:
 		print(f'[ERROR] {e}', file=sys.stderr)
 		return 2
-
-'''
-
-# ---------- these go in run()
-	# check for missing data
-	checkers(cleaned_file)
-'''
-
 
 
 if __name__ == "__main__":

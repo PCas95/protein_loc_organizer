@@ -23,9 +23,9 @@ def save_output(ofi: str, ret_obj: dict):
 		ret_obj (dict): Nested dictionary
 	"""
 	with open(ofi, 'w') as out:
-		print('SeqID', 'prediction', 'score', 'margin', 'cleavage', sep="\t", file=out)
+		print('SeqID', 'prediction', 'score', 'margin', 'cleavage', 'notes', sep="\t", file=out)
 		for k in ret_obj.keys():
-			print(ret_obj[k]['SeqID'], ret_obj[k]['prediction'], ret_obj[k]['score'], ret_obj[k]['margin'], ret_obj[k]['cleavage'], sep="\t", file=out)
+			print(ret_obj[k]['SeqID'], ret_obj[k]['prediction'], ret_obj[k]['score'], ret_obj[k]['margin'], ret_obj[k]['cleavage'], ret_obj[k]['notes'], sep="\t", file=out)
 
 
 ## function for main data extraction from file
@@ -46,7 +46,7 @@ def data_extractor(line: str, seqIDs: list, dc: dict):
 		# splits line into separate values
 		ini_vals = stripLine.split(' ')
 		# initialise dictionary with NAs
-		metrics = {'score': 'NA', 'margin': 'NA', 'cleavage': 'NA'}
+		metrics = {'score': 'NA', 'margin': 'NA', 'cleavage': 'NA', 'notes': 'NA'}
 		# extract data/prediction line
 		if len(ini_vals) < 3:
 			raise ValueError('[ERROR] Input file is missing required fields. Please double check input is LipoP SHORT output.')
@@ -54,14 +54,20 @@ def data_extractor(line: str, seqIDs: list, dc: dict):
 		pred = ini_vals[1]
 		## splits the 3 possible metrics in file
 		for i in ini_vals[2:]:
+			notes = []
 			m, sep, v = i.partition('=')
 			if m in metrics and v:
 				metrics[m] = v
+			elif m not in metrics and v:
+				notes.append(i)
 
 		# update dictionary with clean data from file
 		metrics['SeqID'] = seqid
 		metrics['prediction'] = pred
+		if notes:
+			metrics['notes'] = ';'.join(notes)
 		dc[seqid] = metrics
+
 		if not silent:
 			print(f'[INFO] Found prediction metrics for {seqid}')
 
