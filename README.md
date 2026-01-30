@@ -4,7 +4,7 @@
 
 A suite of lightweight Python tools for extracting and standardizing output from various protein localization and property prediction servers. These tools convert non-tabular, inconsistent web-tool outputs into consistent, analysis-ready tables.
 
-This repository aims at making available `protein_loc_organizer`, a small suite of tools used to produce data tables for the research article "[**PLACEHOLDER:PAPER TITLE**]" (**PLACEHOLDER: DOI**).
+This repository aims at making available `protein_loc_organizer`, a small suite of tools used to produce data tables for the research article "I. Krasteva et al., Cold adaptation drives metabolic specialization and virulence potential in Listeria monocytogenes clonal complexes CC1 and CC9 (**PLACEHOLDER: DOI**)" (**submitted to Food Microbiology, article currently awaiting publication**).
 
 # ⚠️ WARNING
 
@@ -31,14 +31,17 @@ Many online protein prediction tools often present results in formats that are d
 
 - Parse raw text, HTML, or downloaded reports from prediction servers;
 - Extract key biological features (*e.g.*, signal peptides, localization scores, transmembrane segments) reported by the prediction software;
-- Convert them into standardized plain-text tables (CSV, TSV), both human- and machine-readable;
+- Convert them into standardized plain-text tables (TSV), both human- and machine-readable;
 - Facilitate downstream analyses and reproducibility of data organization.
 
 ## Features
 
 - Standardized output format;
 - Standalone extractors for each prediction server/software;
-- Minimal dependencies.
+- Minimal dependencies;
+- Unified and consistent approach;
+- Data extraction based on smart matching using a list of IDs;
+- Wrapper to run multiple extractors **[BETA]**.
 
 ## Repo Structure
 
@@ -52,7 +55,9 @@ Many online protein prediction tools often present results in formats that are d
 ├── tmhmm_extract.py          # Parser for TMHMM transmembrane predictions
 ├── vaxijen_extract.py        # Parser for VaxiJen antigenicity results
 ├── virulentpred_extract.py   # Parser for VirulentPred outputs
-├── table_builder.py          # Combines parsed outputs into unified table
+├── common_utils.py           # Common utilities imported in all scripts
+├── table_builder.py          # Combines parsed outputs into unified table (not automatic yet, it's undergoing revision)
+├── proteomics_wrapper.py     # [NEW] Beta: Runs all parsers at once
 ├── LICENSE
 └── README.md
 ```
@@ -72,6 +77,7 @@ Many online protein prediction tools often present results in formats that are d
 	- `sys`
 	- `os`
 	- `re`
+	- `pathlib`
 	- `numpy`
 	- `pandas`
 
@@ -83,13 +89,15 @@ Just clone this repo and you are good to go:
 git clone https://github.com/PCas95/protein_loc_organizer.git
 
 cd protein_loc_organizer
-python bepipred_extract.py -h
 ```
 
 Except for `numpy` and `pandas`, all the dependencies are standard Python modules: most likely you will only need to install those two:
 
 ```bash
 pip install numpy pandas
+
+python cello_extract.py -h
+python proteomics_wrapper.py -h
 ```
 
 Or, if you prefer to manage `numpy`/`pandas` in a **Conda** environment:
@@ -101,38 +109,40 @@ conda activate protein_loc_organizer
 python signalp_extract.py -h
 ```
 
-> **Note:** since these tools are based on output that may change in the future, building a fixed package distribution (conda or Docker) was deemed unnecessary and potentially misleading for this project. We may consider adding such feature in the future, if there is community interest.
+> **Note:** since these tools are based on output that may be subject to change, building a fixed package distribution (conda or Docker) was deemed unnecessary and potentially misleading for this project. We may consider adding such feature in the future, if there is community interest.
 
 ### Usage
 
-Each extractor can be run independently or, from the upcoming version, also combined through the wrapper `protein_organizer.py` (not available yet). `table_builder.py` builds a final, merged table with all prediction and additional inferred classification (based on the analysis needs for the publication "").
+Each extractor can be run independently or combined by using the wrapper `proteomics_wrapper.py`.
+
+`table_builder.py` builds a final, merged table with all prediction and additional inferred classification (based on the analysis needs for the publication "I. Krasteva et al., Cold adaptation drives metabolic specialization and virulence potential in Listeria monocytogenes clonal complexes CC1 and CC9").
 
 ### Supported Tools
 
 - **BepiPred v2.0** – epitope prediction
 - **CELLO** – subcellular localization
-- **LipoP** – signal peptides/lipoprotein detection
-- **PSORTb** – subcellular localization
-- **SignalP** – signal peptide prediction
-- **TMHMM** – transmembrane helices prediction
+- **LipoP v1.0** – signal peptides/lipoprotein detection
+- **PSORTb v3.0** – subcellular localization
+- **SignalP v5.0** – signal peptide prediction
+- **TMHMM v2.0** – transmembrane helices prediction
 - **VaxiJen** – antigenicity prediction
-- **VirulentPred** – virulence prediction
+- **VirulentPred v2.0** – virulence prediction
 
 ## Notice / Disclaimer
 
-This project is **open-source** and is **not affiliated with, endorsed by, or sponsored by** the developers or maintainers of any of the prediction tools it parses. All trademarks and tool names belong to their respective owners.
+This project is **open-source** and is **not affiliated with, endorsed by, or sponsored by** the developers or maintainers of any of the prediction tools mentioned in this repository. All trademarks and tool names belong to their respective owners.
 
 The extractors in this suite are provided solely to help users organize and standardize results for downstream analysis. They operate on outputs generated by third-party prediction servers that **may not provide standardized or tabular output formats**, and that **may not provide public code or stable programmatic interfaces**.
 
 This project acts only as an **independent** utility to structure information from prediction servers for research workflows.
 
-Because these prediction tools may change their underlying logic, version, or webpage layout **without notice**, any such modification may cause the extractors in this repository to become **incompatible** with future outputs.
+Because these prediction tools may change their underlying logic, version, webpage layout or output format/contents **without notice**, any such modification may cause the extractors in this repository to become **incompatible** with future outputs.
 
 Therefore, users are responsible for complying with the terms of use of each prediction tool and for verifying the accuracy and continued compatibility of the extracted data.
 
 ## References
 
-	I. Krasteva, [...]; "". https://doi.org/.
+	I. Krasteva et al. "Cold adaptation drives metabolic specialization and virulence potential in Listeria monocytogenes clonal complexes CC1 and CC9" (awaiting publication).
 
 ## Acknowledgements
 
@@ -154,53 +164,62 @@ See the GNU Affero General Public License for more details.
 
 The extractors in this repository follow a common design: they take highly unstructured, web-derived prediction results and coerce them into a consistent, machine-readable format. Because each prediction server outputs data differently (and often without a formal specification), the internal logic of each extractor must be adapted to the quirks of that tool's output.
 
-Example: the BepiPred extractor (`bepipred_extract.py`) performs explicit header validation, reconstructs per-position data into nested dictionaries, and applies domain-specific filtering rules (*e.g.*, probability thresholds, solvent exposure, and minimum run lengths).
+Example: the BepiPred extractor (`bepipred_extract.py`) performs header validation, reconstructs per-position data into nested dictionaries, and applies domain-specific filtering rules (*e.g.*, probability thresholds, solvent exposure, and minimum run lengths).
 
-Similar patterns are used throughout the suite, but each extractor necessarily implements tool-specific parsing rules depending on what information the original source provides.
+Similar patterns are used throughout the suite, but each extractor necessarily implements tool-specific parsing rules depending on what information is provided by the original source.
+
+> You can find descriptions of expected inputs in the [tools' user guide](wiki/User_Guide.md) 
 
 ### Structure and Expectations
 
 - **Input is inherently unstructured**
 
-	Most supported tools provide text as webpages, *ad-hoc* CSVs, or inconsistent HTML layouts. Because of this, some parts of the code rely on fragile assumptions (column order, labels, spacing, or hidden formatting choices) that cannot be made more robust without official schemas.
+	Many supported tools provide text as webpages, *ad-hoc* CSVs, or inconsistent HTML layouts. Additionally, spacing and formatting are often irregular. Because of this lack of structure, parts of the code may rely on fragile assumptions (*e.g.*, hidden formatting choices) that cannot be made more robust without official specifications.
+
+	Starting with version **1.26.01**, the extractor scripts use an updated extraction approach that minimises dependence on unstable strings. This includes avoiding direct interaction with variable whitespace and strings known to have changed in earlier prediction outputs (strings are stripped and normalised leveraging features of Python's classes whenever possible, rather than using a fuzzy approach).
 
 - **Extractors are intentionally lightweight**
 
-	Each extractor is an independent script. This keeps them simple to inspect, debug, and update when upstream tools change their format.
+	Each extractor is an independent script. This keeps them simple to inspect, debug, and update when upstream tools change their format. All of the extractor share the same design (core logic in a `run()` function) for easy debug, import and testing.
 
 - **Error handling is defensive**
 
-	Since upstream tools may silently alter their output, extractors explicitly validate headers, field counts, or expected keywords early. This prevents silently producing corrupted tables. **Always check the output!**
+	Upstream tools may silently alter their output. As protection, starting from version **1.26.01**, the extractors validate headers, field counts, or expected keywords early and dinamically, rather than with hard coded strings. This helps preventing silent production of corrupted tables or errors at a string change in the output of the upstream tool. **Always check the output!**
 
 - **Output is standardized, input never is**
 
-	All extractors aim to emit predictable, tidy, CSV/TSV outputs. Ensuring this consistency often means compensating for missing values, renaming fields, or flattening nested patterns.
+	All extractors aim to emit predictable, tidy, TSV outputs. Ensuring this consistency often means compensating for missing values, renaming fields, or flattening nested patterns.
 
 ### Known Limitations
 
-Some parts of the parsing logic could theoretically be more elegant, generalizable, or modular, but cannot be improved meaningfully because the input formats themselves have no guarantees. This cannot be changed as long as upstream tools continue to provide:
+Some parts of the parsing logic could theoretically be more elegant or generalizable, but cannot be improved meaningfully because the input formats themselves have no guarantees. This cannot be changed as long as upstream tools continue to provide:
 
 - undocumented formats
 - *ad-hoc* HTML layouts
-- inconsistent column structures
+- inconsistent column structures and spacing
 - hard-coded symbols or abbreviations
 
-There are sections of each extractor that look brittle or overly manual. This is intentional: building more robust functions is not a reliable way to ensure correct extraction from shifting, unstructured data sources, in this specific case (see [Future Improvements](#future-improvements) below).
+Starting from version **1.26.01** of the extractors, brittle or overly manual sections have been significantly reduced. Remaining areas that could be changed for more rubust functions have not been improved, since there is no reliable way to ensure correct extraction from shifting, unstructured data sources, in this specific case (see [Future Improvements](#future-improvements) below).
 
 ### Future Improvements
 
 Coming up in the next version(s):
 
-- Change line extraction from brittle, regex-based logic to list-based
-	> Users will provide a list of SeqIDs; tools will extract them using a smart and consistent logic.
-- Unify the overall architecture
-	> Scripts are currently undergoing massive reorganization of core logic, to provide a unified, structured, shared logic, allowing easier management through a wrapper.
-- Factor out common parsing utilities by adding a small `common_utils.py` shared module with helpers 
-- Normalize error handling and messages
-- Standardize output table format (CSV/TSV)
-	> Currently the separator used is chosen case-by-case, depending on the kind of characters in the columns (noisy or may contain commas) and the needs of the original wet-lab team.
+- Align `vaxijen_extract.py` and `virulentpred_extract.py` to new logic
+- Re-factoring of `bepipred_extract.py` to comply to new, list-based logic
+- `table_builder.py`:
+	- Re-factoring to accept the new structured outputs and implement reliable automatic execution
+	- Allow merging and production of 3 possible tables:
+		- data from localisation (all tools except virulentpred and vaxijen)
+		- data from virulence (only virulentpred and vaxijen)
+		- final (join of the previous 2, without final score)
+	- injection into wrapper as optional (or other "single-command solution") 
+- Final version of `proteomics_wrapper.py`
+	- more elegant error handling
+	- fine-grained control over inputs
+	- more elegant reports of executed and failed processes (both to `stderr` and to log file)
 - Improve type hints and docstrings consistently
-- Add tiny example inputs
+- ~Add tiny example inputs~ -> documentation and examples for each tool in this repo
 
 ### Contributing
 
@@ -223,6 +242,6 @@ Contributions of bug fixes, improvements, and test cases are also welcome. Pleas
 
 ### Final Note
 
-The main purpose of this repository is to provide access to the code used to produce data table in the manuscript "[**PLACEHOLDER:PAPER TITLE**]" (**PLACEHOLDER: DOI**).
+The main purpose of this repository is to provide access to the code used to produce data table in the manuscript "[I. Krasteva et al., Cold adaptation drives metabolic specialization and virulence potential in Listeria monocytogenes clonal complexes CC1 and CC9]" (**PLACEHOLDER: DOI**).
 
 The scripts are released for transparency and to help the community, but the most desirable outcome would be the release of a **tested, open-source, published, reproducible and documented bioinformatics pipeline for proteomics**.
