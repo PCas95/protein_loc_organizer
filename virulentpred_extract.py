@@ -59,7 +59,7 @@ def missing_data(df: pd.DataFrame) -> list[str]:
 
 
 # main scripts
-def run(input_path: str, output: str | None = None, idlist: list) -> pd.DataFrame:
+def run(input_path: str, idlist: list, output: str | None = None) -> pd.DataFrame:
 	"""
 	Takes 2 STRINGs (path to files): reads input from STRING 1 and saves processed file to output (STRING 2).
 	Output STRING can be None (when launched by wrapper). Default: None.
@@ -109,7 +109,7 @@ def main(argv=None):
 	args = parser.parse_args()
 
 	try:
-		df = run(args.input, args.output, args.id_list)
+		df = run(args.input, args.id_list, args.output)
 	except (FileNotFoundError, ValueError) as e:
 		print(f'ERROR: {e}', file=sys.stderr)
 		return 1

@@ -8,6 +8,7 @@ import argparse, os, sys, re
 from datetime import datetime
 from itertools import groupby
 from operator import itemgetter
+from common_utils import id_reader, find_id
 
 
 # classes
@@ -33,7 +34,7 @@ seq_err_msg = f"Could not retrieve any sequence ID from input file.\n\
 
 
 # functions
-def initialiser(i: str, s: str, dc: dict) -> list:
+def initialiser(i: str, s: str, dc: dict, sids: list[str]) -> list[str]:
 	"""
 	Takes a PATH to file, a STRING and an empty DICTIONARY. Returns a header as LIST and updates the DICTIONARY.
 	
@@ -44,18 +45,35 @@ def initialiser(i: str, s: str, dc: dict) -> list:
 	Returns:
 		list[str]: List of column names
 	"""
+	valid_headers = [
+		['Entry', 'Position', 'AminoAcid', 'Exposed/Buried']#,
+#		['Accession', 'Residue', 'BepiPred-3.0 score', 'BepiPred-3.0 linear epitope score']
+	]
+
 	with open(i) as fh:
 		header = fh.readline().rstrip().split(s)
+
 		try:
-			if header[0] != 'Entry' or header[1] != 'Position' or header[2] != 'AminoAcid' or header[3] != 'Exposed/Buried':
+			if header[:4] not in valid_headers:
 				raise HeaderFormatError(head_err_msg)
 		except IndexError:
 			raise HeaderFormatError(head_err_msg)
 
 		for line in fh.readlines():
 			cols = line.rstrip().split(s)
-			seqid = cols[0]
-			
+			seqid = None
+
+			if any(find_id(i, cols[0]) for i in sids):
+				seqid = id_reader(cols[0])
+				if not silent:
+					print(f'[INFO] Found prediction for {seqid}')
+
+			if seqid == None:
+				continue
+
+			#row = dict(zip(header, cols[:len(header)]))
+			#dc.setdefault(seqid, {})[cols[1]] = row
+
 			if seqid not in dc.keys():
 				dc[seqid] = {cols[1]: { header[2]: cols[2], header[3]: cols[3],
 										header[4]: cols[4], header[5]: cols[5], 
@@ -84,7 +102,7 @@ def exposed_parser(ret_obj: dict, header: list, k: str) -> list:
 	# create filtered list of aminoacid positions exposed to solvent and with probability >=0.5
 	aas = []
 	for innKey in ret_obj[k].keys():
-		if ret_obj[k][innKey][header[3]] == 'E' and float(ret_obj[k][innKey][header[8]]) >= 0.5:
+		if ret_obj[k][innKey][header[3]] == 'E' and float(ret_obj[k][innKey][header[-1]]) >= 0.5:
 			aas.append(int(innKey))
 
 	# create list of consecutive aminoacids from filtered list (list of tuples)
@@ -123,12 +141,12 @@ def save_output(ofi: str, ret_obj: dict, header: list):
 		
 		## start navigating dictionary: for each protein ID
 		for k in ret_obj.keys():
-			if silent == False:
+			if not silent:
 				print('[INFO] Processing entry ' + k + '...')
 
 			exposed = exposed_parser(ret_obj, header, k)
 
-			if silent == False:
+			if not silent:
 				print('[INFO] Probable EETS found in ' + k + ': ' + str(len(exposed)))
 
 			# for each group of 4+ consecutive aminoacids, output line with data from original file
@@ -143,13 +161,14 @@ def save_output(ofi: str, ret_obj: dict, header: list):
 
 
 # main functions
-def run(input_path: str, sep: str, output: str | None = None) -> dict:
+def run(input_path: str, idlist: str, fsep: str, output: str | None = None) -> dict:
 
-	# read and process file to extract aminoacid positions from each protein, the SeqIDs and the values in their columns
 	dc = dict()
-	innerDic = dict()
 
-	header = initialiser(input_path, sep, dc)
+	with open(idlist, 'r') as ids:
+		seqIDs = [ l.rstrip() for l in ids.readlines() ]
+
+	header = initialiser(input_path, fsep, dc, idlist)
 
 	# kill script and throw error if input is not a valid file or no SeqIDs are found
 	if len(dc.keys()) == 0:
@@ -157,14 +176,16 @@ def run(input_path: str, sep: str, output: str | None = None) -> dict:
 
 	# extract AAs exposed to solvent and create filtered output table
 	# criteria: epitope probability >= 0.5 & exposed/buried == E & consecutive aminoacids >= 4
-	print(f"\n{description}\n")
+	if not silent:
+		print(f"\n{description}\n")
 
 	# write output only if asked (wrapper can pass output=None)
+	n_lines = None
 	if output:
 		n_lines = save_output(output, dc, header)
 
-	if n_lines < 1:
-		print("\n[WARN] No epitope exposed to solvent was found\n")
+	if n_lines and n_lines < 1:
+		print("\n[WARN] No epitope exposed to solvent found\n")
 
 	return dc
 
@@ -178,12 +199,13 @@ def main():
 	# manage arguments 
 	parser = argparse.ArgumentParser(prog='bepipred_extract.py', description=description)
 	parser.add_argument('-i', '--input', help="Raw prediction output from Bepipred.", required=True)
+	parser.add_argument('-l', '--idlist', help='A single column, plain text table with all SeqIDs to extract.', required=True)
 	parser.add_argument('-s', '--separator', default=sep, help="Field separator used in the input file. Default is comma (',', default for Bepipred output).")
 	parser.add_argument('-o', '--output', default=outName, help='Optional: a file or path and file name for the output csv table. Default: bepipred_results_date_time.csv in current directory.')
 	args = parser.parse_args()
 
 	try:
-		run(args.input, args.separator, args.output)
+		run(args.input, args.idlist, args.separator, args.output)
 		print(f"[INFO] Finished. Output file is {args.output}" if os.path.exists(args.output) else "[ERROR] Failed to write output file.")
 		return 0
 	except (FileNotFoundError, ValueError) as e:

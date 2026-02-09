@@ -24,6 +24,10 @@ def exp_tmp(ret_obj):
 	save_output('vaxijen.tmp', ret_obj)
 
 
+def run():
+	print('WIP')
+
+
 # main script
 def main():
 	# set default output name
@@ -80,5 +84,4 @@ def main():
 
 
 if __name__ == "__main__":
-	main()
-	sys.exit(0)
+	sys.exit(main())

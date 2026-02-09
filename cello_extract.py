@@ -50,7 +50,6 @@ def save_output(ofi: str, ret_obj: dict):
 			print(*output_line, sep="\t", file=out)
 
 
-
 ## removes empty/dirty lines from file
 def strip_non_data_lines(file: list[str]) -> list[str]:
 	"""

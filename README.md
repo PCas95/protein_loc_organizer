@@ -113,9 +113,25 @@ python signalp_extract.py -h
 
 ### Usage
 
-Each extractor can be run independently or combined by using the wrapper `proteomics_wrapper.py`.
+Each extractor can be run independently or it can be combined with others by using the wrapper `proteomics_wrapper.py`.
 
 `table_builder.py` builds a final, merged table with all prediction and additional inferred classification (based on the analysis needs for the publication "I. Krasteva et al., Cold adaptation drives metabolic specialization and virulence potential in Listeria monocytogenes clonal complexes CC1 and CC9").
+
+- **For independent runs:**
+
+```bash
+python3 protein_loc_organizer/bepipred_extract.py --input bepipred_2.csv --idlist ids.txt --output test-bepi2_results.tsv
+
+python3 protein_loc_organizer/tmhmm_extract.py -i prediction_servers/TMHMM_ext.txt -l accession_numbers_single_col.csv
+```
+
+- **For wrapper execution:**
+
+```bash
+python3 protein_loc_organizer/proteomics_wrapper.py -i prediction_servers/ -l accession_numbers_single_col.csv -o wrapper-test/
+```
+
+> [**In-depth info in the User Guide**](./wiki/User_Guide.md)
 
 ### Supported Tools
 
