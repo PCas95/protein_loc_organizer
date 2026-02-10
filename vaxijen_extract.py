@@ -1,31 +1,98 @@
 #!/usr/bin/env python
 
 # vaxijen_extract.py
-__version__ = '1.2.0'
+__version__ = '1.26.02'
 
 # manage libraries
 import argparse, sys, os, re
 from datetime import datetime
+from common_utils import id_reader, find_id
 
-# define functions
+
+# classes
+## custom error classes
+class MissingPredError(ValueError):
+	"""Missing prediction metrics"""
+
+
+# globals
+silent = False
+
+
+# functions
 ## saves output table in standardised format
-def save_output(ofi, ret_obj):
-	header = []
+def save_output(ofi: str, ret_obj: dict[dict], header: list[str]):
 	with open(ofi, 'w') as out:
-		for k,v in ret_obj.items():
-			if len(header) == 0:
-				header = list(v.keys())
-				print(*header, sep="\t", file=out)
+		print(*header, sep="\t", file=out)
+		for _,v in ret_obj.items():
 			row = [ v[i] for i in header ]
 			print(*row, sep="\t", file=out)
 
-## exports tmp output table - to be used with Proteus wrapper
-def exp_tmp(ret_obj):
-	save_output('vaxijen.tmp', ret_obj)
+## removes non-data lines
+def strip_empty_lines(file: list[str]) -> list[str]:
+	
+	clean_file = [ line.rstrip() for line in file if line.strip() ]	
+	return clean_file
 
 
-def run():
-	print('WIP')
+# main functions
+def run(input_path: str, idlist: str, output: str | None = None):
+
+	with open(input_path, 'r') as fh:
+		clean_file = strip_empty_lines(fh.readlines())
+	
+	if not clean_file:
+		raise MissingPredError(f'File {input_path} is empty or corrupted.')
+
+	regx = r'^(.+)(Overall Protective Antigen Prediction) =(.+)$'
+	score_header = 'Overall Protective Antigen Prediction'
+	pred_header = 'Prediction'
+	seqid_header = 'SeqID'
+	p_desc_header = 'Protein'
+	header = [seqid_header, p_desc_header, score_header, pred_header]
+
+	dc = dict()
+	
+	for i in clean_file:
+		groups = re.fullmatch(regx, i)
+
+		p_desc = groups[1].strip()
+		seqid = id_reader(p_desc)
+		g3 = groups[3].strip()
+		score = g3.split(' ')[0]
+		pred = re.search(r'Probable [A-Z\-]+', g3).group()
+
+		dc.setdefault(seqid,
+					{'SeqID': seqid,
+					 'Protein': p_desc,
+					 'Overall Protective Antigen Prediction': score,
+					 'Prediction': pred}
+					)
+
+	if not silent:
+		print(f'[INFO] Found {len(dc.keys())} prediction lines')
+
+	if len(dc.keys()) == 0:
+		raise MissingPredError('Could not find any prediction lines')
+
+	with open(idlist, 'r') as ids:
+		seqIDs = [ l.rstrip() for l in ids.readlines() ]
+
+	# extract list-wise
+	subset = { id_reader(i) for i in seqIDs }
+	dc = { k: v for k, v in dc.items() if k in subset }
+
+	if not silent:
+		print(f'[INFO] Extracted {len(dc.keys())} matching proteins')
+
+	if len(dc.keys()) == 0:
+		raise MissingPredError('No prediction lines matching IDs')
+
+	# write output if asked
+	if output:
+		save_output(output, dc, header)
+
+	return dc
 
 
 # main script
@@ -35,52 +102,20 @@ def main():
 	outName = 'vaxijen_results_' + str(date.strftime('%Y-%m-%d_%H-%M-%S')) + '.tsv'
 
 	# manage arguments 
-	parser = argparse.ArgumentParser(prog='vaxijen_extract.py', description="Extracts data from Vaxijen output (as copied from the results web page) and creates a tsv table with the prediction results.\
-		Usage: python3 vaxijen_extract.py -i <input_file>")
+	parser = argparse.ArgumentParser(prog='vaxijen_extract.py', description="Extracts data from Vaxijen output (as copied from the results web page) and creates a tsv table with the prediction results.")
 	parser.add_argument('-i', '--input', help="Vaxijen prediction output.", required=True)
+	parser.add_argument('-l', '--id_list', help="List of all SeqIDs to retrieve from file.", required=True)
 	parser.add_argument('-o', '--output', default=outName, help='Optional: a file or path and file name for the output tsv table. Default: vaxijen_results_date_time.tsv in current directory.')
 	args = parser.parse_args()
 
-	# read file and parse line by line to extract values for each protein
-	fh = open(args.input, 'r')
-
-	regx = r'^>[A-Za-z0-9_\.]+\|([A-Za-z0-9_]+)\|([A-Za-z0-9_]+) (.+$)' #r'^>([A-Z0-9_.]+) (.+\]) (.+[0-9]) (\(.+ \))\.$'
-	dc = dict()
-
-	for line in fh.readlines():
-		if line.startswith('>'):
-			stripLine = line.rstrip()
-			mstring = re.match(regx, stripLine)
-			seqid = mstring.group(1)
-			prot, pred_v = mstring.group(3).split(' (')[0:2] #mstring.group(2)
-			pred_v = pred_v.replace(')', '') #mstring.group(3)
-			pred_s = re.search(r'Probable [A-Z\-]+', mstring.group(3)).group(0) #mstring.group(4)
-
-			#dc[seqid] = {'SeqID': seqid, 'Protein': prot, pred_v.split(' = ')[0]: pred_v.split(' = ')[1], 'Prediction': pred_s.lstrip('( ').rstrip(' )')}
-			dc[seqid] = {'SeqID': seqid,
-						'Protein': prot,
-						'Protective Antigen Prediction': pred_v,
-						'Prediction': pred_s}
-		else:
-			continue
-
-	fh.close()
-
-	# kill script and throw error if input is not a valid file
-	if len(dc.keys()) == 0:
-		print('ERROR: could not find any row of Vaxijen output in the input file.\nPlease ensure the input file contains rows from Vaxijen\'s output as they appear on the web page of Vaxijen results.')
-		sys.exit(1)
-
-	# print table to output file
-	save_output(args.output, dc)
+	try:
+		run(args.input, args.id_list, args.output)
+	except (FileNotFoundError, ValueError) as e:
+		print(f'[ERROR] {e}', file=sys.stderr)
+		return 1
 
 	# print exit message and exit
-	if os.path.exists(args.output):
-		print("Finished. Output file is " + args.output)
-	else:
-		print('Failed to write output file.')
-
-	return dc
+	print(f"[INFO] Finished. Output file is {args.output}" if os.path.exists(args.output) else "[ERROR] Failed to write output file.")
 
 
 if __name__ == "__main__":

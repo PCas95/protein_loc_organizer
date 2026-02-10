@@ -89,12 +89,15 @@ def score_assigner(df0: pd.DataFrame) -> pd.DataFrame:
 
 def build_ag_table(vaxijen_data: pd.DataFrame,
 				   virulentpred_data: pd.DataFrame, 
-				   bepipred_data: pd.DataFrame) -> pd.DataFrame:
+				   bepipred_data: pd.DataFrame | None = None) -> pd.DataFrame:
 	
-	ag_table = pd.merge(vaxijen_data, virulentpred_data, bepipred_data, on='SeqID', how='inner')
+	virulentpred_data.columns = ['SeqID', 'Protein', 'VIRULENTPRED Prediction', 'VIRULENTPRED Scores']
+	vaxijen_data.drop(vaxijen_data.columns[1], axis='columns', inplace=True)
+	vaxijen_data.columns = ['SeqID', 'VAXIJEN OPAP', 'VAXIJEN Prediction']
 
-	ag_table.to_csv('joined_antigen_table.tsv', sep="\t", index=False)
-	# modify ag_table here
+	ag_table = pd.merge(vaxijen_data, virulentpred_data, on='SeqID', how='inner')
+	#ag_table.to_csv('joined_antigen_table.tsv', sep="\t", index=False)
+	ag_table = ag_table[['SeqID'] + ['Protein'] + [c for c in ag_table.columns if c != 'SeqID' and c != 'Protein']]
 
 	return ag_table
 
@@ -102,9 +105,9 @@ def build_ag_table(vaxijen_data: pd.DataFrame,
 # main functions
 def run(cello: str | None, psortb: str | None, 
 		tmhmm: str | None, signalp: str | None, 
-		lipop: str | None, out_1: str, 
+		lipop: str | None, out_1: str | None, 
 		vaxijen: str | None, virulentpred: str | None, 
-		bepipred: str | None, out_2: str):
+		bepipred: str | None, out_2: str | None):
 
 	# import tables from cellular localisation tools
 	if cello and psortb and tmhmm and signalp and lipop:
@@ -126,12 +129,12 @@ def run(cello: str | None, psortb: str | None,
 
 
 	# import tables from antigen prediction tools
-	if vaxijen and virulentpred and bepipred:
+	if vaxijen and virulentpred:
 		vaxijen_data = pd.read_csv(vaxijen, sep="\t", dtype=str)
 		virulentpred_data = pd.read_csv(virulentpred, sep="\t", dtype=str)
-		bepipred_data = pd.read_csv(bepipred, sep="\t", dtype=str)
+		
+		ag_table = build_ag_table(vaxijen_data, virulentpred_data)
 
-		ag_table = build_ag_table(vaxijen_data, virulentpred_data, bepipred_data)
 		ag_table.to_csv(out_2, sep="\t", index=False)
 
 
@@ -140,7 +143,7 @@ def main():
 	# set default output name
 	date = datetime.now()
 	outName1 = 'final_subloc_score_' + str(date.strftime('%Y-%m-%d_%H-%M-%S')) + '.tsv'
-	outName2 = 'final_antigen_score_' + str(date.strftime('%Y-%m-%d_%H-%M-%S')) + '.tsv'
+	outName2 = 'final_antigen_' + str(date.strftime('%Y-%m-%d_%H-%M-%S')) + '.tsv'
 
 	# manage inputs
 	parser = argparse.ArgumentParser(description='table_builder2.py builds the final table of protein typing. Required inputs are tables from: cello, psortb, tmhmm, signalp, lipop, vaxijen, virulentpred, bepipred.')

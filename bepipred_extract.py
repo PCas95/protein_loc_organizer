@@ -14,7 +14,7 @@ from common_utils import id_reader, find_id
 # classes
 ## custom error classes
 class HeaderFormatError(ValueError):
-	"""Malformed PSortB SHORT output"""
+	"""Malformed Bepipred output"""
 
 class SeqIDNotFoundError(ValueError):
 	"""No matching SeqIDs found in input"""
